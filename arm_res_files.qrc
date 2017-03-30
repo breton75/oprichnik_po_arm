@@ -1,0 +1,26 @@
+<RCC>
+    <qresource prefix="/">
+        <file>Anchor.png</file>
+        <file>ARM.png</file>
+        <file>Database.png</file>
+        <file>Fuel.png</file>
+        <file>FuelMove.png</file>
+        <file>FuelMove2.png</file>
+        <file>Graphic.png</file>
+        <file>Measure.png</file>
+        <file>Report1.png</file>
+        <file>Report2.png</file>
+        <file>Report3.png</file>
+        <file>Report4.png</file>
+        <file>fuel_system_1.gif</file>
+        <file>fuel_system_2.gif</file>
+        <file>fuel_system_3.JPG</file>
+        <file>fuel_system_4.jpg</file>
+        <file>fuel_system_5.jpg</file>
+        <file>fuel_system_6.jpg</file>
+        <file>fuel_system_7.png</file>
+        <file>fuel_system_8.png</file>
+        <file>fuel_system_9.jpg</file>
+        <file>List.ico</file>
+    </qresource>
+</RCC>
