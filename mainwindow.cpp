@@ -1,10 +1,7 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include "reportwindow.h"
-#include <QMessageBox>
-#include <QFileDialog>
-#include <QTextCodec>
-#include <QPainter>
+
 
 //==========================================================================================
 // компонент - цистерна на мнемосхеме
@@ -123,30 +120,110 @@ MainWindow::MainWindow(QWidget *parent) :
 //    scene->addItem(picItem);
 
     ui->graphicsView->setScene(scene);
-    ui->graphicsView->fitInView(ui->graphicsView->geometry(), Qt::KeepAspectRatio);
-    resizeTimer = new QTimer();
+    ui->graphicsView->setRenderHint(QPainter::Antialiasing, true);
+//    ui->graphicsView->setAlignment(Qt::AlignTop | Qt::AlignLeft); //!!
+    ui->graphicsView->setAlignment(Qt::AlignCenter | Qt::AlignHCenter);
+    ui->graphicsView->setViewportUpdateMode(QGraphicsView::SmartViewportUpdate);
+//    resizeTimer = new QTimer();
     //resizeTimer->st
-    connect(resizeTimer, SIGNAL(timeout()), this, SLOT(formResized()));
+//    connect(resizeTimer, SIGNAL(timeout()), this, SLOT(formResized()));
 
 //    db = new QSqlDatabase();//"QPSQL");
 //    query = new QSqlQuery();
 
     db = QSqlDatabase::addDatabase("QPSQL");
-    db.setHostName("localhost");
+    db.setHostName("172.16.4.83");
+    db.setPort(5432);
     db.setDatabaseName("drain_client");
     db.setUserName("postgres");
     db.setPassword("postgres");
-    if(!db.open()) {
+    if(!db.open())
+    {
         QString errSt = db.lastError().text();
         qDebug() << "Ошибка открытия БД проекта: " << errSt;
         QMessageBox::critical(this, "Ошибка соединения с БД проекта", errSt);
-    } else {
-        query = new QSqlQuery();
-        prepareScheme();
+        return;
+    } 
+    
+    
+    /* свиридов */
+    _item_map = QMap<int, SvTankGraphicsItem*>();
+    
+    /* читаем баки из БД */
+    QString sql_sqlect_tanks = "SELECT "
+                               " tanks.id as id, "
+                               " tanks.tank_type as tank_type,"
+                               " tanks.sensor_type as sensor_type,"
+                               " tanks.name as tank_name "
+//                               " sensors.id as sensor_id,"
+//                               " sensors.is_active as is_active"
+                               " FROM tanks "
+                               " ORDER BY id";
+//                               " LEFT JOIN sensors on sensors.tank_id = tanks.id";
+    
+    
+    QSqlQuery* q = new QSqlQuery(db);
+    if(!q->exec(sql_sqlect_tanks))
+    {
+      qDebug() << q->lastError().text();
+      q->finish();
+      delete q;
+      return;
     }
+    
+    
+    while(q->next())
+    {
+      int id = q->value("id").toInt();
+      QString name = q->value("tank_name").toString();
+      SvTankGraphicsItem* tank = new SvTankGraphicsItem(this, SvGraphicsItemTypes::gtTank, id, name);
+      tank->setPos(120*((id-1)%3), 125*int((id-1)/3));
+      
+      _item_map.insert(id, tank);
+      scene->addItem(tank);
+    }
+    
+    q->finish();
+    
+    /* читаем потребителей из БД */
+    sql_sqlect_tanks = "SELECT "
+                               " consumers.id as id, "
+                               " consumers.consumer_type as consumer_type,"
+                               " consumers.meter_type as meter_type,"
+                               " consumers.name as consumer_name "
+                               " FROM consumers "
+                               " ORDER BY id";
+//                               " LEFT JOIN sensors on sensors.tank_id = tanks.id";
+    
+    
+    q = new QSqlQuery(db);
+    if(!q->exec(sql_sqlect_tanks))
+    {
+      qDebug() << q->lastError().text();
+      q->finish();
+      delete q;
+      return;
+    }
+    
+    while(q->next())
+    {
+      int id = q->value("id").toInt();
+      QString name = q->value("consumer_name").toString();
+      SvTankGraphicsItem* tank = new SvTankGraphicsItem(this, SvGraphicsItemTypes::gtCustomer, id, name);
+      tank->setPos(400, 125*(id-1));
+      
+      _item_map.insert(id, tank);
+      scene->addItem(tank);
+    }
+    
+    q->finish();
+    
+    delete q;
+    
+//    ui->graphicsView->fitInView(_item_map.value(2), Qt::KeepAspectRatio);
+    
 
     //QTextCodec::setCodecForLocale(QTextCodec::codecForName(QByteArray("UTF-8"))); // это и так по умолчанию
-
     fRepSetup = new ReportSetup(this);//fm_report_params(this);
     fRepSetup->hide();
 
@@ -161,6 +238,7 @@ MainWindow::MainWindow(QWidget *parent) :
 
     fEventsLog = new EventsLog();
     fEventsLog->hide();
+    qDebug() << "1";
 }
 
 MainWindow::~MainWindow()
@@ -207,26 +285,26 @@ void MainWindow::prepareScheme()
     ui->graphicsView->scale(8, 8);//5, 5);
 }
 
-void MainWindow::showEvent(QShowEvent *) {
-    ui->statusBar->showMessage("Show", 1000);
-//    QRect r = ui->graphicsView->rect();
-//    qDebug() << "graphicsView rect: " << r.width() << "x"  << r.height();
-//    QRectF rf = ui->graphicsView->sceneRect();
-//    qDebug() << "graphicsView scene rect: " << rf.left() << ":" << rf.top() << ", " << rf.width() << "x"  << rf.height();
-//    //ui->graphicsView->scene()->b
-//    //ui->graphicsView->adjustSize();
-//    QSize s = ui->graphicsView->sizeHint();
-//    qDebug() << "graphicsView size hint: " << s.width() << "x" << s.height();
-//    //if(!picItem) return;
-//    //qDebug() << picItem;
-    //prepareScheme();
-    if(scene->items().count() <= 0) return;
-//      ui->graphicsView->fitInView(picItem, Qt::KeepAspectRatio);
-    //ui->graphicsView->setViewport(ui->graphicsView);
-    //ui->graphicsView->fitInView(scene->items().at(0), Qt::KeepAspectRatio);
-    //resizeEvent(0);
-    formResized();
-}
+//void MainWindow::showEvent(QShowEvent *) {
+//    ui->statusBar->showMessage("Show", 1000);
+////    QRect r = ui->graphicsView->rect();
+////    qDebug() << "graphicsView rect: " << r.width() << "x"  << r.height();
+////    QRectF rf = ui->graphicsView->sceneRect();
+////    qDebug() << "graphicsView scene rect: " << rf.left() << ":" << rf.top() << ", " << rf.width() << "x"  << rf.height();
+////    //ui->graphicsView->scene()->b
+////    //ui->graphicsView->adjustSize();
+////    QSize s = ui->graphicsView->sizeHint();
+////    qDebug() << "graphicsView size hint: " << s.width() << "x" << s.height();
+////    //if(!picItem) return;
+////    //qDebug() << picItem;
+//    //prepareScheme();
+//    if(scene->items().count() <= 0) return;
+////      ui->graphicsView->fitInView(picItem, Qt::KeepAspectRatio);
+//    //ui->graphicsView->setViewport(ui->graphicsView);
+//    //ui->graphicsView->fitInView(scene->items().at(0), Qt::KeepAspectRatio);
+//    //resizeEvent(0);
+//    formResized();
+//}
 
 void MainWindow::formResized()
 {
@@ -280,9 +358,9 @@ void MainWindow::formResized()
         ui->graphicsView->fitInView(picItem, Qt::KeepAspectRatio);
 }
 
-void MainWindow::resizeEvent(QResizeEvent *) {
-   resizeTimer->start(500);
-}
+//void MainWindow::resizeEvent(QResizeEvent *) {
+//   resizeTimer->start(500);
+//}
 
 // масштабирование, корректировка, отрисовка
 void MainWindow::drawScene()
@@ -366,3 +444,71 @@ void MainWindow::on_pbnEvents_clicked()
     fEventsLog->show();
 }
 
+
+/* свиридов */
+
+
+
+
+void SvTankGraphicsItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget)
+{
+  Q_UNUSED(widget);
+
+  
+  painter->setPen(QColor(0, 0, 0, 200));
+  
+  QPainterPath path;
+  
+  switch (_type) {
+    case SvGraphicsItemTypes::gtTank:
+    {
+      path.addRoundedRect(QRectF(0, 0, 100, 100), 10, 10);
+      painter->setBrush(QBrush(QColor(0, 255, 0,100), Qt::SolidPattern));
+      
+      /* добавляем название бака */
+      QFont fnt("Courier New", 10);
+      QFontMetrics fm(fnt);
+      path.addText(QPointF(50 - fm.width(_name)/2, -5), fnt, _name);
+      
+      painter->drawPath(path);
+      
+      /* уровень топлива */
+      path.addRoundedRect(QRectF(0, 0, 100, 50), 10, 10);
+      painter->setBrush(QBrush(QColor(255, 0, 0,100), Qt::SolidPattern));
+      
+      _val = float(qrand()) / RAND_MAX;
+      QString strval = QString::number( _val, 'g', 1);
+      path.addText(QPointF(50 - fm.width(strval)/2, 50 - fm.height()/2), fnt, strval);
+      
+      break;
+    }
+      
+    case SvGraphicsItemTypes::gtCustomer:
+    {
+      path.addRect(QRectF(0, 40, 100, 20));
+      path.addEllipse(QRectF(0, 0, 100, 100));
+//      path.setFillRule(Qt::WindingFill);
+      painter->setBrush(QBrush(QColor(0, 0, 255,100), Qt::SolidPattern));
+      
+      /* добавляем название потребителя */
+      QFont fnt("Courier New", 10);
+      QFontMetrics fm(fnt);
+      path.addText(QPointF(50 - fm.width(_name)/2, -5), fnt, _name);
+      
+      painter->drawPath(path);
+      
+      /* значение */
+      _val = float(qrand()) / RAND_MAX;
+      QString strval = QString::number( _val, 'g', 1);
+      path.addText(QPointF(50 - fm.width(strval)/2, 52/* - fm.height()/2*/), fnt, strval);
+      
+      break;
+    }
+  }
+
+  
+  painter->drawPath(path);  
+  
+
+      
+}
