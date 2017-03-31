@@ -18,14 +18,16 @@ SOURCES += main.cpp\
     reportsetup.cpp \
     fuelmove.cpp \
     checkform.cpp \
-    eventslog.cpp
+    eventslog.cpp \
+    sv_customgraphicsitem.cpp
 
 HEADERS  += mainwindow.h \
     reportwindow.h \
     reportsetup.h \
     fuelmove.h \
     checkform.h \
-    eventslog.h
+    eventslog.h \
+    sv_customgraphicsitem.h
 
 FORMS    += mainwindow.ui \
     reportwindow.ui \

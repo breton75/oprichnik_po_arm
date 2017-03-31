@@ -2,6 +2,7 @@
 #include "ui_mainwindow.h"
 #include "reportwindow.h"
 
+QMutex MUT;
 
 //==========================================================================================
 // компонент - цистерна на мнемосхеме
@@ -147,7 +148,7 @@ MainWindow::MainWindow(QWidget *parent) :
     
     
     /* свиридов */
-    _item_map = QMap<int, SvTankGraphicsItem*>();
+    _tanks_map = QMap<int, SvTankGraphicsItem*>();
     
     /* читаем баки из БД */
     QString sql_sqlect_tanks = "SELECT "
@@ -176,10 +177,10 @@ MainWindow::MainWindow(QWidget *parent) :
     {
       int id = q->value("id").toInt();
       QString name = q->value("tank_name").toString();
-      SvTankGraphicsItem* tank = new SvTankGraphicsItem(this, SvGraphicsItemTypes::gtTank, id, name);
+      SvTankGraphicsItem* tank = new SvTankGraphicsItem(this, id, name);
       tank->setPos(120*((id-1)%3), 125*int((id-1)/3));
-      
-      _item_map.insert(id, tank);
+       
+      _tanks_map.insert(id, tank);
       scene->addItem(tank);
     }
     
@@ -209,20 +210,26 @@ MainWindow::MainWindow(QWidget *parent) :
     {
       int id = q->value("id").toInt();
       QString name = q->value("consumer_name").toString();
-      SvTankGraphicsItem* tank = new SvTankGraphicsItem(this, SvGraphicsItemTypes::gtCustomer, id, name);
-      tank->setPos(400, 125*(id-1));
+      SvConsumerGraphicsItem* consumer = new SvConsumerGraphicsItem(this, id, name);
+      consumer->setPos(400, 125*(id-1));
       
-      _item_map.insert(id, tank);
-      scene->addItem(tank);
+      _consumers_map.insert(id, consumer);
+      scene->addItem(consumer);
     }
     
     q->finish();
-    
     delete q;
-    
-//    ui->graphicsView->fitInView(_item_map.value(2), Qt::KeepAspectRatio);
-    
 
+    _pg_thr = new SvPGThread(db);
+    connect(_pg_thr, SIGNAL(finished()), _pg_thr, SLOT(deleteLater()));
+    connect(_pg_thr, SIGNAL(tank_updated(int, TankDataStruct)), this, SLOT(repaintTank(int, TankDataStruct)));
+    connect(_pg_thr, SIGNAL(consumer_updated(int, ConsumerDataStruct)), this, SLOT(repaintConsumer(int, ConsumerDataStruct)));
+    connect(_pg_thr, SIGNAL(sensor_updated(int, SensorDataStruct)), this, SLOT(repaintSensor(int, SensorDataStruct)));
+    connect(_pg_thr, SIGNAL(recalc()), this, SLOT(recalc()));
+    _pg_thr->startTimer(1000);
+
+    
+    
     //QTextCodec::setCodecForLocale(QTextCodec::codecForName(QByteArray("UTF-8"))); // это и так по умолчанию
     fRepSetup = new ReportSetup(this);//fm_report_params(this);
     fRepSetup->hide();
@@ -238,7 +245,7 @@ MainWindow::MainWindow(QWidget *parent) :
 
     fEventsLog = new EventsLog();
     fEventsLog->hide();
-    qDebug() << "1";
+    
 }
 
 MainWindow::~MainWindow()
@@ -446,69 +453,94 @@ void MainWindow::on_pbnEvents_clicked()
 
 
 /* свиридов */
-
-
-
-
-void SvTankGraphicsItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget)
+void MainWindow::repaintTank(int id, TankDataStruct data)
 {
-  Q_UNUSED(widget);
+  _tanks_map.value(id)->setValue(data);
+  _tanks_map.value(id)->update();
+}
 
+void MainWindow::repaintConsumer(int id, ConsumerDataStruct data)
+{
+  _consumers_map.value(id)->setValue(data);
+  _consumers_map.value(id)->update();
+}
+
+void MainWindow::repaintSensor(int id, SensorDataStruct data)
+{
+  _sensors_map.value(id)->setValue(data);
+  _sensors_map.value(id)->update();
+}
+
+void MainWindow::recalc()
+{
+  total_tanks = 0;
+  foreach (SvTankGraphicsItem *item, _tanks_map.values())
+    total_tanks += item->data().volume;
   
-  painter->setPen(QColor(0, 0, 0, 200));
+  total_out = 0;
+  foreach (SvConsumerGraphicsItem *item, _consumers_map.values())
+    total_out += item->data().val1;
   
-  QPainterPath path;
+//  qDebug() << total_tanks;
+  ui->label_6->setText(QString("%1 л.").arg(total_tanks, 0, 'g', 3));
+  ui->label_7->setText(QString("%1 л.").arg(total_out, 0, 'g', 1));
   
-  switch (_type) {
-    case SvGraphicsItemTypes::gtTank:
+}
+
+SvPGThread::SvPGThread(QSqlDatabase &db)
+{
+  _db = db;
+}
+
+SvPGThread::~SvPGThread()
+{ 
+  _isWorking = false;
+  while(!_isFinished) QApplication::processEvents();
+  deleteLater();
+}
+
+void SvPGThread::run()
+{
+  
+}
+
+void SvPGThread::timerEvent(QTimerEvent *te)
+{
+    QString sql_tanks = "SELECT tank_id, dt, fuel_height, pressure, volume, weight "
+                  " FROM tanks_fuel_rest;";
+    
+    QString sql_consumers = "";
+    
+    
+    MUT.lock();
+    
+    QSqlQuery *q = new QSqlQuery(_db);
+    
+    if(!q->exec(sql_tanks))
     {
-      path.addRoundedRect(QRectF(0, 0, 100, 100), 10, 10);
-      painter->setBrush(QBrush(QColor(0, 255, 0,100), Qt::SolidPattern));
-      
-      /* добавляем название бака */
-      QFont fnt("Courier New", 10);
-      QFontMetrics fm(fnt);
-      path.addText(QPointF(50 - fm.width(_name)/2, -5), fnt, _name);
-      
-      painter->drawPath(path);
-      
-      /* уровень топлива */
-      path.addRoundedRect(QRectF(0, 0, 100, 50), 10, 10);
-      painter->setBrush(QBrush(QColor(255, 0, 0,100), Qt::SolidPattern));
-      
-      _val = float(qrand()) / RAND_MAX;
-      QString strval = QString::number( _val, 'g', 1);
-      path.addText(QPointF(50 - fm.width(strval)/2, 50 - fm.height()/2), fnt, strval);
-      
-      break;
+      qDebug() << q->lastError().text();
+      q->finish();
+      delete q;
+      MUT.unlock();
+      return;
     }
-      
-    case SvGraphicsItemTypes::gtCustomer:
+    
+    TankDataStruct data;
+    while(q->next())
     {
-      path.addRect(QRectF(0, 40, 100, 20));
-      path.addEllipse(QRectF(0, 0, 100, 100));
-//      path.setFillRule(Qt::WindingFill);
-      painter->setBrush(QBrush(QColor(0, 0, 255,100), Qt::SolidPattern));
-      
-      /* добавляем название потребителя */
-      QFont fnt("Courier New", 10);
-      QFontMetrics fm(fnt);
-      path.addText(QPointF(50 - fm.width(_name)/2, -5), fnt, _name);
-      
-      painter->drawPath(path);
-      
-      /* значение */
-      _val = float(qrand()) / RAND_MAX;
-      QString strval = QString::number( _val, 'g', 1);
-      path.addText(QPointF(50 - fm.width(strval)/2, 52/* - fm.height()/2*/), fnt, strval);
-      
-      break;
+      int id = q->value("tank_id").toInt();
+      data.height = q->value("fuel_height").toReal();
+      data.volume = q->value("volume").toReal();
+      emit tank_updated(id, data);
     }
-  }
-
-  
-  painter->drawPath(path);  
-  
-
-      
+    
+    q->finish();
+    
+    
+    delete q;
+    
+    MUT.unlock();
+    
+    emit recalc();
+    
 }

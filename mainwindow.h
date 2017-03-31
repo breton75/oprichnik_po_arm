@@ -12,11 +12,10 @@
 #include <QMessageBox>
 #include <QFileDialog>
 #include <QTextCodec>
-#include <QPainter>
-#include <QGraphicsItem>
 #include <QMap>
+#include<QMutex>
 
-#include <QTextItem>
+#include "sv_customgraphicsitem.h"
 
 class ReportWindow;
 
@@ -24,7 +23,7 @@ namespace Ui {
 class MainWindow;
 }
 
-class SvTankGraphicsItem;
+class SvPGThread;
 
 class MainWindow : public QMainWindow
 {
@@ -41,6 +40,12 @@ private slots:
     void on_pbnEvents_clicked();
 
     void formResized();
+    
+    void repaintTank(int id, TankDataStruct data);
+    void repaintConsumer(int id, ConsumerDataStruct data);
+    void repaintSensor(int id, SensorDataStruct data);
+    
+    void recalc();
 
 //protected:
 //    virtual void resizeEvent(QResizeEvent *);
@@ -68,46 +73,49 @@ private:
     void drawScene();
     
     /* свиридов */
-    QMap<int, SvTankGraphicsItem*> _item_map;
+    QMap<int, SvTankGraphicsItem*> _tanks_map;
+    QMap<int, SvConsumerGraphicsItem*> _consumers_map;
+    QMap<int, SvSensorGraphicsItem*> _sensors_map;
+    
+    SvPGThread *_pg_thr;
+    
+    qreal total_tanks;
+    qreal total_in;
+    qreal total_out;
 };
 
-enum SvGraphicsItemTypes
-{
-  gtTank = 65537,
-  gtSensor,
-  gtCustomer,
-  gtPipe
-};
 
-class SvTankGraphicsItem: public QGraphicsItem
+class SvPGThread: public QThread
 {
+    Q_OBJECT
   
 public:
-  explicit SvTankGraphicsItem(QWidget* parent, int type, int id, QString name)
-  {
-    _type = type;
-    _id = id;
-    _name = name;
-  }
+  explicit SvPGThread(QSqlDatabase &db);
   
-  ~SvTankGraphicsItem() { }
+  ~SvPGThread();
   
-  int type() { return _type; }
-  int id() { return _id; }
-  QString name() { return _name; }
+  bool isWorking() { return _isWorking; }
+  bool isFinished() { return _isFinished; }
   
-  void setValue(qreal val) { _val = val; }
+protected:
+  void run() Q_DECL_OVERRIDE;
+  void timerEvent(QTimerEvent *te);
   
 private:
-  void paint(QPainter *painter, const QStyleOptionGraphicsItem *item, QWidget *widget) Q_DECL_OVERRIDE;
+  QSqlDatabase _db;
   
-  QRectF boundingRect() const { return QRectF(0, 0, 100, 100); }
+  bool _isWorking = false;
+  bool _isFinished = true;
   
-  int _type;
-  int _id;
-  QString _name;
-  qreal _val;
+//public slots:
+//  void stop();
   
+signals:
+  void tank_updated(int , TankDataStruct);
+  void consumer_updated(int , ConsumerDataStruct);
+  void sensor_updated(int , SensorDataStruct);
+  
+  void recalc();
   
 };
 
