@@ -7,10 +7,13 @@
 #include <QMap>
 #include <QTextItem>
 
+#include <QDebug>
 
 struct TankDataStruct {
-  qreal height;
-  qreal volume;
+  qreal height = 0.5;
+  qreal volume = 50.0;
+  qreal weight = 50.0;
+  qreal max_volume = 100.0;
 };
 
 struct ConsumerDataStruct {

@@ -475,15 +475,17 @@ void MainWindow::recalc()
 {
   total_tanks = 0;
   foreach (SvTankGraphicsItem *item, _tanks_map.values())
-    total_tanks += item->data().volume;
+    total_tanks += item->data().weight;
   
   total_out = 0;
   foreach (SvConsumerGraphicsItem *item, _consumers_map.values())
     total_out += item->data().val1;
   
 //  qDebug() << total_tanks;
-  ui->label_6->setText(QString("%1 л.").arg(total_tanks, 0, 'g', 3));
-  ui->label_7->setText(QString("%1 л.").arg(total_out, 0, 'g', 1));
+  ui->label_6->setText(QString("%1 т.").arg(total_tanks, 0, 'f', 1));
+  ui->label_7->setText(QString("%1 т.").arg(total_out, 0, 'f', 1));
+  
+  ui->label_5->setText(QTime::currentTime().toString("hh:mm:ss"));
   
 }
 
@@ -499,15 +501,24 @@ SvPGThread::~SvPGThread()
   deleteLater();
 }
 
-void SvPGThread::run()
-{
-  
-}
-
 void SvPGThread::timerEvent(QTimerEvent *te)
 {
-    QString sql_tanks = "SELECT tank_id, dt, fuel_height, pressure, volume, weight "
-                  " FROM tanks_fuel_rest;";
+    QString sql_tanks = " WITH tm AS ("
+                        "  SELECT "
+                        "    tank_id, max(v_volume) as max_volume "
+                        "  FROM tank_measures "
+                        "  GROUP BY tank_id)"
+                        " SELECT "
+                        "   t.id as tank_id, "
+                        "   tm.max_volume as max_volume, "
+                        "   tr.volume as volume, "
+                        "   tr.weight as weight, "
+                        "   tr.fuel_height as fuel_height "
+                        " FROM tanks t "
+                        "   JOIN tm ON tm.tank_id = t.id "
+                        "   JOIN tank_types tt ON tt.id = t.tank_type "
+                        "   JOIN tanks_fuel_rest tr ON tr.tank_id = t.id "
+                        " ORDER BY t.id";
     
     QString sql_consumers = "";
     
@@ -531,6 +542,9 @@ void SvPGThread::timerEvent(QTimerEvent *te)
       int id = q->value("tank_id").toInt();
       data.height = q->value("fuel_height").toReal();
       data.volume = q->value("volume").toReal();
+      data.weight = q->value("weight").toReal();
+      data.max_volume = q->value("max_volume").toReal();
+      
       emit tank_updated(id, data);
     }
     

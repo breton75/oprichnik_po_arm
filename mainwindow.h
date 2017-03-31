@@ -98,7 +98,7 @@ public:
   bool isFinished() { return _isFinished; }
   
 protected:
-  void run() Q_DECL_OVERRIDE;
+//  void run() Q_DECL_OVERRIDE;
   void timerEvent(QTimerEvent *te);
   
 private:
