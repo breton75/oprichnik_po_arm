@@ -40,16 +40,12 @@ class SvCustomGraphicsItem: public QGraphicsItem
 public:
   explicit SvCustomGraphicsItem(QWidget *parent, int id, QString name);
   
-  ~SvCustomGraphicsItem() { }
-  
-  virtual int type() const { return -1; }
-//  virtual auto value();
-//  virtual void setValue();
+  virtual int type() = 0; // const { return -1; }
   
   int id() const { return _id ; }
   QString name() const { return _name; }
   
-private:
+protected:
   int _id;
   QString _name;
   
