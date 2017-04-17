@@ -19,7 +19,7 @@ public:
     QDateTime repBegin();
     QDateTime repEnd();
 
-    int test;
+//    int test;
 
 private:
     Ui::ReportSetup *ui;
@@ -39,7 +39,7 @@ private slots:
     void on_bnMakeReport_clicked();
     void on_bnCancel_clicked();
     void on_commandLinkButton_clicked();
-    void on_ReportSetup_finished(int result);
+    //void on_ReportSetup_finished(int result);
 };
 
 #endif // REPORTSETUP_H

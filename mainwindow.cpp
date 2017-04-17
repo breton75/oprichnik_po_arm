@@ -106,8 +106,11 @@ MainWindow::MainWindow(QWidget *parent) :
     , fTanksCount(0), fSensorsCount(0), fConsumersCount(0)
 {
     ui->setupUi(this);
-    setWindowIcon(QIcon(":/Anchor.png"));
+    //setWindowIcon(QIcon(":/Anchor.png"));
+    setWindowIcon(QIcon(":/anchor.png"));
     ui->centralWidget->setLayout(ui->gridLayout);
+
+    //qDebug() << "Current date-ISODate: " << QDate::currentDate().addDays(1).toString(Qt::ISODate);
 
     scene = new QGraphicsScene();
     picItem = 0;
@@ -144,13 +147,13 @@ MainWindow::MainWindow(QWidget *parent) :
         qDebug() << "Ошибка открытия БД проекта: " << errSt;
         QMessageBox::critical(this, "Ошибка соединения с БД проекта", errSt);
         return;
-    } 
-    
-    
-    /* свиридов */
+    }
+
+
+    // свиридов
     _tanks_map = QMap<int, SvTankGraphicsItem*>();
-    
-    /* читаем баки из БД */
+
+    // читаем баки из БД
     QString sql_sqlect_tanks = "SELECT "
                                " tanks.id as id, "
                                " tanks.tank_type as tank_type,"
@@ -161,8 +164,8 @@ MainWindow::MainWindow(QWidget *parent) :
                                " FROM tanks "
                                " ORDER BY id";
 //                               " LEFT JOIN sensors on sensors.tank_id = tanks.id";
-    
-    
+
+
     QSqlQuery* q = new QSqlQuery(db);
     if(!q->exec(sql_sqlect_tanks))
     {
@@ -171,22 +174,22 @@ MainWindow::MainWindow(QWidget *parent) :
       delete q;
       return;
     }
-    
-    
+
+
     while(q->next())
     {
       int id = q->value("id").toInt();
       QString name = q->value("tank_name").toString();
       SvTankGraphicsItem* tank = new SvTankGraphicsItem(this, id, name);
       tank->setPos(120*((id-1)%3), 125*int((id-1)/3));
-       
+
       _tanks_map.insert(id, tank);
       scene->addItem(tank);
     }
-    
+
     q->finish();
-    
-    /* читаем потребителей из БД */
+
+    // читаем потребителей из БД
     sql_sqlect_tanks = "SELECT "
                                " consumers.id as id, "
                                " consumers.consumer_type as consumer_type,"
@@ -195,8 +198,8 @@ MainWindow::MainWindow(QWidget *parent) :
                                " FROM consumers "
                                " ORDER BY id";
 //                               " LEFT JOIN sensors on sensors.tank_id = tanks.id";
-    
-    
+
+
     q = new QSqlQuery(db);
     if(!q->exec(sql_sqlect_tanks))
     {
@@ -205,18 +208,18 @@ MainWindow::MainWindow(QWidget *parent) :
       delete q;
       return;
     }
-    
+
     while(q->next())
     {
       int id = q->value("id").toInt();
       QString name = q->value("consumer_name").toString();
       SvConsumerGraphicsItem* consumer = new SvConsumerGraphicsItem(this, id, name);
       consumer->setPos(400, 125*(id-1));
-      
+
       _consumers_map.insert(id, consumer);
       scene->addItem(consumer);
     }
-    
+
     q->finish();
     delete q;
 
@@ -228,8 +231,8 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(_pg_thr, SIGNAL(recalc()), this, SLOT(recalc()));
     _pg_thr->startTimer(1000);
 
-    
-    
+
+
     //QTextCodec::setCodecForLocale(QTextCodec::codecForName(QByteArray("UTF-8"))); // это и так по умолчанию
     fRepSetup = new ReportSetup(this);//fm_report_params(this);
     fRepSetup->hide();
@@ -245,7 +248,7 @@ MainWindow::MainWindow(QWidget *parent) :
 
     fEventsLog = new EventsLog();
     fEventsLog->hide();
-    
+
 }
 
 MainWindow::~MainWindow()
@@ -452,7 +455,7 @@ void MainWindow::on_pbnEvents_clicked()
 }
 
 
-/* свиридов */
+// свиридов
 void MainWindow::repaintTank(int id, TankDataStruct data)
 {
   _tanks_map.value(id)->setValue(data);
@@ -476,17 +479,17 @@ void MainWindow::recalc()
   total_tanks = 0;
   foreach (SvTankGraphicsItem *item, _tanks_map.values())
     total_tanks += item->data().weight;
-  
+
   total_out = 0;
   foreach (SvConsumerGraphicsItem *item, _consumers_map.values())
-    total_out += item->data().val1;
-  
+    total_out += item->data().spend_v;//val1;
+
 //  qDebug() << total_tanks;
   ui->label_6->setText(QString("%1 т.").arg(total_tanks, 0, 'f', 1));
-  ui->label_7->setText(QString("%1 т.").arg(total_out, 0, 'f', 1));
-  
+  ui->label_7->setText(QString("%1 л/мин").arg(total_out, 0, 'f', 3));
+
   ui->label_5->setText(QTime::currentTime().toString("hh:mm:ss"));
-  
+
 }
 
 SvPGThread::SvPGThread(QSqlDatabase &db)
@@ -495,9 +498,9 @@ SvPGThread::SvPGThread(QSqlDatabase &db)
 }
 
 SvPGThread::~SvPGThread()
-{ 
-  _isWorking = false;
-  while(!_isFinished) QApplication::processEvents();
+{
+//  _isWorking = false;
+  //while(!_isFinished) QApplication::processEvents();
   deleteLater();
 }
 
@@ -519,14 +522,10 @@ void SvPGThread::timerEvent(QTimerEvent *te)
                         "   JOIN tank_types tt ON tt.id = t.tank_type "
                         "   JOIN tanks_fuel_rest tr ON tr.tank_id = t.id "
                         " ORDER BY t.id";
-    
-    QString sql_consumers = "";
-    
-    
+
     MUT.lock();
-    
+
     QSqlQuery *q = new QSqlQuery(_db);
-    
     if(!q->exec(sql_tanks))
     {
       qDebug() << q->lastError().text();
@@ -535,7 +534,7 @@ void SvPGThread::timerEvent(QTimerEvent *te)
       MUT.unlock();
       return;
     }
-    
+
     TankDataStruct data;
     while(q->next())
     {
@@ -544,17 +543,38 @@ void SvPGThread::timerEvent(QTimerEvent *te)
       data.volume = q->value("volume").toReal();
       data.weight = q->value("weight").toReal();
       data.max_volume = q->value("max_volume").toReal();
-      
+
       emit tank_updated(id, data);
     }
-    
     q->finish();
-    
-    
+
+    QString sql_consumers = "select * from consumers_spend";
+    if(!q->exec(sql_consumers))
+    {
+      qDebug() << q->lastError().text();
+      q->finish();
+      delete q;
+      MUT.unlock();
+      return;
+    }
+
+    //TankDataStruct data;
+    ConsumerDataStruct c_data;
+    while(q->next())
+    {
+      int id = q->value("consumer_id").toInt();
+      c_data.spend_v = q->value("spend_v").toReal();
+      c_data.spend_w = q->value("spend_w").toReal();
+
+      emit consumer_updated(id, c_data);
+    }
+    q->finish();
+
+
     delete q;
-    
+
     MUT.unlock();
-    
+
     emit recalc();
-    
+
 }

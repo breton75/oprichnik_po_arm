@@ -42,24 +42,159 @@ EventsLog::EventsLog(QWidget *parent) :
 
     ui->pbnReadFromFile->setVisible(false);
     ui->textEdit->setVisible(false);
+
+    ui->deBegin->setDate(QDate::fromString("2017-03-01", Qt::ISODate));
+    ui->deBegin->setTime(QTime::fromString("00:00"));
+    //ui->deEnd->setDate(QDate::currentDate ());
+    ui->deEnd->setDate(QDate::fromString("2017-03-05", Qt::ISODate));
+    ui->deEnd->setTime(QTime::fromString("23:59"));
+
+    query = new QSqlQuery();
 }
 
 EventsLog::~EventsLog()
 {
+    query->finish();
+    delete query;
     delete ui;
+}
+
+void EventsLog::showEvent(QShowEvent *)
+{
+    createEventLog();
 }
 
 void EventsLog::on_pbnGetLog_clicked()
 {
-    QDateTime dtBegin = ui->dteBegin->dateTime();
-    QDateTime dtEnd = ui->dteEnd->dateTime();
-    if(dtEnd.date().year() != dtBegin.date().year()) dtEnd = dtBegin;
-    int dc = dtEnd.date().dayOfYear() - dtBegin.date().dayOfYear() + 1;
+    createEventLog();
+    return;
+
+    QDateTime repBegin = ui->deBegin->dateTime();
+    QDateTime repEnd = ui->deEnd->dateTime();
+    if(repEnd.date().year() != repBegin.date().year()) repEnd = repBegin;
+
     ui->tableWidget->clear();
     ui->tableWidget->setColumnCount(2);
     ui->tableWidget->setHorizontalHeaderLabels(QStringList() << "Дата/время" << "Событие");
+
+    // список событий
+    QString qry = "SELECT"\
+    "  sl.id, sl.dt, "\
+    "  sl.event_type_id, et.name as event_name,"\
+    "  st.description || ' - ' || coalesce(t.name, c.name) as sensor_name,"\
+    "  coalesce(t.name, c.name) as place_name, "\
+    "  sl.num1, "\
+    "  sl.num2, "\
+    "  sl.num3, "\
+    "  sl.description "\
+    "FROM system_log sl"\
+    "       JOIN"\
+    "     event_types et"\
+    "       ON et.id = sl.event_type_id"\
+    "       LEFT JOIN"\
+    "     sensors s"\
+    "       ON s.id = sl.num1"\
+    "       LEFT JOIN"\
+    "     sensor_types st"\
+    "       ON st.id = s.sensor_type"\
+    "       LEFT JOIN"\
+    "     tanks t"\
+    "       ON t.id = s.tank_id"\
+    "       LEFT JOIN"\
+    "     consumers c"\
+    "       ON c.id = s.consumer_id "\
+    "WHERE sl.dt >= :dt_begin AND sl.dt <= :dt_end "\
+    "ORDER BY sl.dt;"; //
+    query->finish();
+    query->prepare(qry);
+    query->bindValue(":dt_begin", repBegin);
+    query->bindValue(":dt_end", repEnd);
+
+    //if(!query->exec(qry))
+    if(!query->exec())
+    {
+        qDebug() << "Ошибка формирования отчета с " << repBegin << " по " << repEnd << ":";
+        qDebug() << query->lastError().text();
+        query->finish();
+        ui->tableWidget->setRowCount(0);
+        ui->tableWidget->resizeColumnsToContents();
+        return;
+    }
+
+    int n = query->size();
+    ui->tableWidget->setRowCount(n);
+    QString reportDateTimeFormat = "dd.MM.yyyy г. hh:mm:ss";
+    int param1, param2;
+    qreal param3;
+    //QString sensor_name;
+    QString event_desc;
+    QTableWidgetItem *newItem;
+    for(int row = 0; row < n; ++row){
+        if(!query->next()) return;
+
+        newItem = new QTableWidgetItem(QDateTime(query->value("dt").toDateTime()).toString(reportDateTimeFormat));//dt_string);
+        ui->tableWidget->setItem(row, 0, newItem);
+        int event_type = query->value("event_type_id").toInt();
+        param1 = query->value("num1").toInt();
+        param2 = query->value("num2").toInt();
+        param3 = query->value("num3").toInt();
+
+        switch (event_type) {
+        case 1: // превышение норм расхода
+            if(param1 != 0) {
+                // превышение
+                event_desc = tr("Превышение нормы расхода топлива на %1 л/мин").arg(QString::number(param3, 'f', 2));
+            } else {
+                // возврат в норму
+                event_desc = "Расход топлива вошел в норму";
+            }
+            break;
+        case 2: // разница измерения уровня и расхода
+            if(param1 != 0) {
+                // превышение
+                event_desc = tr("Разница измерения уровня и расхода топлива на %1 л").arg(QString::number(param3, 'f', 2));
+            } else {
+                // возврат в норму
+                event_desc = "Разница измерения уровня и расхода топлива прекратилась";
+            }
+            break;
+        case 3: // ручной ввод
+            event_desc = "Ручной ввод";
+            break;
+        case 4: // нет связи
+            if(param2 == 0) {
+                // пропала связь
+                event_desc = tr("Пропала связь, либо отказ датчика: %1").arg(query->value("sensor_name").toString());
+            } else {
+                // появилась связь
+                event_desc = tr("Восстановилась связь с датчиком: %1").arg(query->value("sensor_name").toString());
+            }
+            break;
+        case 5: // движение топлива
+            if(param3 > 0) {
+                // загрузка топлива
+                event_desc = tr("Принято топлива: %1 т").arg(QString::number(param3, 'f', 2));
+            } else {
+                // отгрузка (выдача) топлива
+                event_desc = tr("Отгрузка топлива: %1 т").arg(QString::number(-param3, 'f', 2));
+            }
+            break;
+        default:
+            event_desc = "???";
+            break;
+        }
+        newItem = new QTableWidgetItem(event_desc);
+        ui->tableWidget->setItem(row, 1, newItem);
+    }
+    //ui->tableWidget->resizeColumnsToContents();
+    ui->tableWidget->resizeColumnToContents(0);
+
+return;
+
+    int dc = repEnd.date().dayOfYear() - repBegin.date().dayOfYear() + 1;
     ui->tableWidget->setRowCount(dc);
-    QDateTime dtCurrent = dtBegin;
+
+    QDateTime dtCurrent = repBegin;
     for (int i = 0; i < dc; ++i) {
         //ui->tableWidget->cellWidget(i, 0) = new QTableWidgetItem(dtCurrent.toString("dd.MM.yy HH:mm:ss"));
         //ui->tableWidget->cellWidget(i, 1) = new QTableWidgetItem("");
@@ -68,8 +203,117 @@ void EventsLog::on_pbnGetLog_clicked()
         dtCurrent = dtCurrent.addDays(1);
     }
     ui->tableWidget->resizeColumnToContents(0);
+return;
+
+//    // список событий
+//    QString qry = "SELECT"\
+//    "  sl.id, sl.dt, "\
+//    "  sl.event_type_id, et.name as event_name,"\
+//    "  st.description || ' - ' || coalesce(t.name, c.name) as sensor_name,"\
+//    "  coalesce(t.name, c.name) as place_name, "\
+//    "  sl.num1, "\
+//    "  sl.num2, "\
+//    "  sl.num3, "\
+//    "  sl.description "\
+//    "FROM system_log sl"\
+//    "       JOIN"\
+//    "     event_types et"\
+//    "       ON et.id = sl.event_type_id"\
+//    "       LEFT JOIN"\
+//    "     sensors s"\
+//    "       ON s.id = sl.num1"\
+//    "       LEFT JOIN"\
+//    "     sensor_types st"\
+//    "       ON st.id = s.sensor_type"\
+//    "       LEFT JOIN"\
+//    "     tanks t"\
+//    "       ON t.id = s.tank_id"\
+//    "       LEFT JOIN"\
+//    "     consumers c"\
+//    "       ON c.id = s.consumer_id "\
+//    "ORDER BY sl.dt;";
+
+//    if(!query->exec(qry))
+//    {
+//      qDebug() << query->lastError().text();
+//      query->finish();
+//      ui->tableWidget->setRowCount(0);
+//      ui->tableWidget->resizeColumnsToContents();
+//      return;
+//    }
+
+//    int n = query->size();
+//    ui->tableWidget->setRowCount(n);
+//    QString reportDateTimeFormat = "dd.MM.yyyy г. hh:mm:ss";
+//    int param1, param2;
+//    qreal param3;
+//    //QString sensor_name;
+//    QString event_desc;
+//    QTableWidgetItem *newItem;
+//    for(int row = 0; row < n; ++row){
+//        if(!query->next()) return;
+
+//        newItem = new QTableWidgetItem(QDateTime(query->value("dt").toDateTime()).toString(reportDateTimeFormat));//dt_string);
+//        ui->tableWidget->setItem(row, 0, newItem);
+//        int event_type = query->value("event_type_id").toInt();
+//        param1 = query->value("num1").toInt();
+//        param2 = query->value("num2").toInt();
+//        param3 = query->value("num3").toInt();
+
+//        switch (event_type) {
+//        case 1: // превышение норм расхода
+//            if(param1 != 0) {
+//                // превышение
+//                event_desc = tr("Превышение нормы расхода топлива на %1 л/мин").arg(QString::number(param3, 'f', 2));
+//            } else {
+//                // возврат в норму
+//                event_desc = "Расход топлива вошел в норму";
+//            }
+//            break;
+//        case 2: // разница измерения уровня и расхода
+//            if(param1 != 0) {
+//                // превышение
+//                event_desc = tr("Разница измерения уровня и расхода топлива на %1 л").arg(QString::number(param3, 'f', 2));
+//            } else {
+//                // возврат в норму
+//                event_desc = "Разница измерения уровня и расхода топлива прекратилась";
+//            }
+//            break;
+//        case 3: // ручной ввод
+//            event_desc = "Ручной ввод";
+//            break;
+//        case 4: // нет связи
+//            if(param2 == 0) {
+//                // пропала связь
+//                event_desc = tr("Пропала связь, либо отказ датчика: ").arg(query->value("sensor_name").toString());
+//            } else {
+//                // появилась связь
+//                event_desc = tr("Восстановилась связь с датчиком: ").arg(query->value("sensor_name").toString());
+//            }
+//            break;
+//        case 5: // движение топлива
+//            if(param3 > 0) {
+//                // загрузка топлива
+//                event_desc = tr("Принято топлива: % т").arg(QString::number(param3, 'f', 2));
+//            } else {
+//                // отгрузка (выдача) топлива
+//                event_desc = tr("Отгрузка топлива: % т").arg(QString::number(-param3, 'f', 2));
+//            }
+//            break;
+//        default:
+//            event_desc = "???";
+//            break;
+//        }
+//        newItem = new QTableWidgetItem(event_desc);
+//        ui->tableWidget->setItem(row, 1, newItem);
+//    }
+//    ui->tableWidget->resizeColumnsToContents();
+
+//return;
+
+
+
 //    int rc = ui->dteEnd->date().dayOfYear()
-    return;
 
     // отладка - проблемы с перекодировкой KOI-8R <-> UTF-8
 //    QChar ch;
@@ -95,7 +339,8 @@ void EventsLog::on_pbnGetLog_clicked()
     int st_len = st.size();
     QByteArray ba = st.toLocal8Bit();
     //ba.append(st);
-    int n = ba.size();
+    //int
+            n = ba.size();
     ui->textEdit->append(tr("Размер строки: %1, массива байт: %2").arg(st_len).arg(n));
     for (int i = 0; i < st_len; ++i) {
         QChar ch = st.at(i);
@@ -265,4 +510,133 @@ void EventsLog::on_pbnReadFromFile_clicked()
         ui->textEdit->append(str_char_vals(st));
     }
 
+}
+
+void EventsLog::createEventLog()
+{
+    QDateTime repBegin = ui->deBegin->dateTime();
+    QDateTime repEnd = ui->deEnd->dateTime();
+    if(repEnd.date().year() != repBegin.date().year()) repEnd = repBegin;
+
+    ui->tableWidget->clear();
+    ui->tableWidget->setColumnCount(2);
+    ui->tableWidget->setHorizontalHeaderLabels(QStringList() << "Дата/время" << "Событие");
+
+    // список событий
+    QString qry = "SELECT"\
+    "  sl.id, sl.dt, "\
+    "  sl.event_type_id, et.name as event_name,"\
+    "  st.description || ' - ' || coalesce(t.name, c.name) as sensor_name,"\
+    "  coalesce(t.name, c.name) as place_name, "\
+    "  sl.num1, "\
+    "  sl.num2, "\
+    "  sl.num3, "\
+    "  sl.description "\
+    "FROM system_log sl"\
+    "       JOIN"\
+    "     event_types et"\
+    "       ON et.id = sl.event_type_id"\
+    "       LEFT JOIN"\
+    "     sensors s"\
+    "       ON s.id = sl.num1"\
+    "       LEFT JOIN"\
+    "     sensor_types st"\
+    "       ON st.id = s.sensor_type"\
+    "       LEFT JOIN"\
+    "     tanks t"\
+    "       ON t.id = s.tank_id"\
+    "       LEFT JOIN"\
+    "     consumers c"\
+    "       ON c.id = s.consumer_id "\
+    "WHERE sl.dt >= :dt_begin AND sl.dt <= :dt_end "\
+    "ORDER BY sl.dt;";
+
+    query->finish();
+    query->prepare(qry);
+    query->bindValue(":dt_begin", repBegin);
+    query->bindValue(":dt_end", repEnd);
+
+    //qDebug() << "Query:\n" << query->lastQuery();
+
+    //if(!query->exec(qry))
+    if(!query->exec())
+    {
+        qDebug() << "Ошибка формирования отчета с " << repBegin << " по " << repEnd << ":";
+        qDebug() << query->lastError().text();
+
+        qDebug() << "Query:\n" << query->lastQuery();
+
+        query->finish();
+        ui->tableWidget->setRowCount(0);
+        ui->tableWidget->resizeColumnsToContents();
+        return;
+    }
+
+    int n = query->size();
+    ui->tableWidget->setRowCount(n);
+    QString reportDateTimeFormat = "dd.MM.yyyy г. hh:mm:ss";
+    int param1, param2;
+    qreal param3;
+    //QString sensor_name;
+    QString event_desc;
+    QTableWidgetItem *newItem;
+    for(int row = 0; row < n; ++row){
+        if(!query->next()) return;
+
+        newItem = new QTableWidgetItem(QDateTime(query->value("dt").toDateTime()).toString(reportDateTimeFormat));//dt_string);
+        ui->tableWidget->setItem(row, 0, newItem);
+        int event_type = query->value("event_type_id").toInt();
+        param1 = query->value("num1").toInt();
+        param2 = query->value("num2").toInt();
+        param3 = query->value("num3").toFloat();
+
+        switch (event_type) {
+        case 1: // превышение норм расхода
+            if(param1 != 0) {
+                // превышение
+                event_desc = tr("Превышение нормы расхода топлива на %1 л/мин").arg(QString::number(param3, 'f', 2));
+            } else {
+                // возврат в норму
+                event_desc = "Расход топлива вошел в норму";
+            }
+            break;
+        case 2: // разница измерения уровня и расхода
+            if(param1 != 0) {
+                // превышение
+                event_desc = tr("Разница измерения уровня и расхода топлива на %1 л").arg(QString::number(param3, 'f', 2));
+            } else {
+                // возврат в норму
+                event_desc = "Разница измерения уровня и расхода топлива прекратилась";
+            }
+            break;
+        case 3: // ручной ввод
+            event_desc = "Ручной ввод";
+            break;
+        case 4: // нет связи
+            if(param2 == 0) {
+                // пропала связь
+                event_desc = tr("Пропала связь, либо отказ датчика: %1").arg(query->value("sensor_name").toString());
+            } else {
+                // появилась связь
+                event_desc = tr("Восстановилась связь с датчиком: %1").arg(query->value("sensor_name").toString());
+            }
+            break;
+        case 5: // движение топлива
+            if(param3 > 0) {
+                // загрузка топлива
+                event_desc = tr("Принято топлива: %1 т").arg(QString::number(param3, 'f', 2));
+            } else {
+                // отгрузка (выдача) топлива
+                event_desc = tr("Отгрузка топлива: %1 т").arg(QString::number(-param3, 'f', 2));
+            }
+            break;
+        default:
+            event_desc = "???";
+            break;
+        }
+        newItem = new QTableWidgetItem(event_desc);
+        ui->tableWidget->setItem(row, 1, newItem);
+    }
+    //ui->tableWidget->resizeColumnsToContents();
+    ui->tableWidget->resizeColumnToContents(0);
 }

@@ -45,19 +45,17 @@ ReportSetup::ReportSetup(QWidget *parent) :
     fRepType = 0;
     connect(this, SIGNAL(chooseRepType(int)), SLOT(setRepType(int)));
 
-    ui->deBegin->setDate(QDate::currentDate().addDays(-1));
-    ui->deEnd->setDate(QDate::currentDate ());
-
-    test = -1;
-
-//    fCal = new FloatingCalender(this);
-//    fCal->hide();
+    //ui->deBegin->setDate(QDate::currentDate().addDays(-1));
+    ui->deBegin->setDate(QDate::fromString("2017-03-01", Qt::ISODate));
+    ui->deBegin->setTime(QTime::fromString("00:00"));
+    //ui->deEnd->setDate(QDate::currentDate ());
+    ui->deEnd->setDate(QDate::fromString("2017-03-05", Qt::ISODate));
+    ui->deEnd->setTime(QTime::fromString("23:59"));
+//    test = -1;
 }
 
 ReportSetup::~ReportSetup()
 {
-//    fCal->close();
-//    fCal->deleteLater();
     delete ui;
 }
 
@@ -79,8 +77,6 @@ QDateTime ReportSetup::repEnd()
 void ReportSetup::setRepType(int newRepType)
 {
     fRepType = newRepType;
-    //ui->lblGropItem->setText(tr("%1").arg(newRepType));
-    // visible, ...
 }
 
 void ReportSetup::on_rbnHourly_clicked(bool checked)
@@ -124,8 +120,8 @@ void ReportSetup::on_commandLinkButton_clicked()
 //    fCal->show();
 }
 
-void ReportSetup::on_ReportSetup_finished(int result)
-{
-    test = result;
-//    fCal->hide();
-}
+//void ReportSetup::on_ReportSetup_finished(int result)
+//{
+//    test = result;
+////    fCal->hide();
+//}

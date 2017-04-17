@@ -4,6 +4,7 @@
 #include <QMainWindow>
 #include <QDateTime>
 #include <QLabel>
+#include <QtSql>
 
 namespace Ui {
 class ReportWindow;
@@ -24,6 +25,7 @@ private:
     QLabel *status2;
     QLabel *status3;
     QLabel *status4;
+    QSqlQuery* query;
 
     void setStatus(int idx, QString newStatus);
 
