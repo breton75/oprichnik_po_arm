@@ -31,7 +31,7 @@ void SvTankGraphicsItem::paint(QPainter *painter, const QStyleOptionGraphicsItem
   // добавляем название бака
   QFont fnt("Courier New", 10);
   QFontMetrics fm(fnt);
-  path.addText(QPointF(50 - fm.width(name())/2, -5), fnt, name());
+  path.addText(QPointF(50 - fm.width(_name)/2, -5), fnt, _name);
   painter->drawPath(path);
 
   // уровень топлива
@@ -80,7 +80,11 @@ void SvConsumerGraphicsItem::paint(QPainter *painter, const QStyleOptionGraphics
   // добавляем название потребителя
   QFont fnt("Courier New", 10);
   QFontMetrics fm(fnt);
-  path.addText(QPointF(50 - fm.width(name())/2, -5), fnt, name());
+//<<<<<<< HEAD
+//  path.addText(QPointF(50 - fm.width(name())/2, -5), fnt, name());
+
+//=======
+  path.addText(QPointF(50 - fm.width(_name)/2, -5), fnt, _name);
 
   painter->drawPath(path);
 
